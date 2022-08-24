@@ -7,18 +7,18 @@ import warnings
 from enum import Enum
 
 import torch
-import torch.nn as nn
-import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
-import torch.optim
-from torch.optim.lr_scheduler import StepLR
 import torch.multiprocessing as mp
+import torch.nn as nn
+import torch.nn.parallel
+import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
-import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
+import torchvision.transforms as transforms
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Subset
 
 model_names = sorted(name for name in models.__dict__
@@ -77,12 +77,20 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
                          'fastest way to use PyTorch for either single node or '
                          'multi node data parallel training')
 parser.add_argument('--dummy', action='store_true', help="use fake data to benchmark")
+parser.add_argument('--dry-run', action='store_true', default=False,
+                    help='quickly check a single pass')
 
 best_acc1 = 0
 
 
 def main():
     args = parser.parse_args()
+
+    if args.dry_run is not None:
+        args.epochs = 1
+        warnings.warn('You have chosen dry-run mode. '
+                      'This will reset epochs to 1 and '
+                      'run training and validation with 1 iteration.')
 
     if args.seed is not None:
         random.seed(args.seed)
@@ -328,6 +336,9 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
         if i % args.print_freq == 0:
             progress.display(i + 1)
+        
+        if args.dry_run:
+            break
 
 
 def validate(val_loader, model, criterion, args):
@@ -358,6 +369,9 @@ def validate(val_loader, model, criterion, args):
 
                 if i % args.print_freq == 0:
                     progress.display(i + 1)
+
+                if args.dry_run:
+                    break
 
     batch_time = AverageMeter('Time', ':6.3f', Summary.NONE)
     losses = AverageMeter('Loss', ':.4e', Summary.NONE)
