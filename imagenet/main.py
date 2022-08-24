@@ -19,6 +19,9 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 import torchvision.transforms as transforms
 from torch.optim.lr_scheduler import StepLR
+
+# import torch.autograd.profiler as profiler
+from torch.profiler import ProfilerActivity, profile, record_function
 from torch.utils.data import Subset
 
 model_names = sorted(name for name in models.__dict__
@@ -262,33 +265,40 @@ def main_worker(gpu, ngpus_per_node, args):
         validate(val_loader, model, criterion, args)
         return
 
-    for epoch in range(args.start_epoch, args.epochs):
-        if args.distributed:
-            train_sampler.set_epoch(epoch)
+    with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], profile_memory=True) as prof:
+        for epoch in range(args.start_epoch, args.epochs):
+            if args.distributed:
+                train_sampler.set_epoch(epoch)
 
-        # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args)
+            # train for one epoch
+            with record_function("train epoch"):
+                train(train_loader, model, criterion, optimizer, epoch, args)
 
-        # evaluate on validation set
-        acc1 = validate(val_loader, model, criterion, args)
-        
-        scheduler.step()
+            # evaluate on validation set
+            with record_function("validate epoch"):
+                acc1 = validate(val_loader, model, criterion, args)
+            
+            scheduler.step()
 
-        
-        # remember best acc@1 and save checkpoint
-        is_best = acc1 > best_acc1
-        best_acc1 = max(acc1, best_acc1)
+            
+            # remember best acc@1 and save checkpoint
+            is_best = acc1 > best_acc1
+            best_acc1 = max(acc1, best_acc1)
 
-        if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-                and args.rank % ngpus_per_node == 0):
-            save_checkpoint({
-                'epoch': epoch + 1,
-                'arch': args.arch,
-                'state_dict': model.state_dict(),
-                'best_acc1': best_acc1,
-                'optimizer' : optimizer.state_dict(),
-                'scheduler' : scheduler.state_dict()
-            }, is_best)
+            if not args.multiprocessing_distributed or (args.multiprocessing_distributed
+                    and args.rank % ngpus_per_node == 0):
+                with record_function("save_checkpoint"):
+                    save_checkpoint({
+                        'epoch': epoch + 1,
+                        'arch': args.arch,
+                        'state_dict': model.state_dict(),
+                        'best_acc1': best_acc1,
+                        'optimizer' : optimizer.state_dict(),
+                        'scheduler' : scheduler.state_dict()
+                    }, is_best)
+    
+    # print(prof.key_averages(group_by_stack_n=5).table(sort_by='self_cpu_time_total', row_limit=5))
+    prof.export_chrome_trace(f"trace_{args.rank}.json")
 
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
@@ -304,31 +314,38 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
     # switch to train mode
     model.train()
-
+    
     end = time.time()
     for i, (images, target) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
-        if args.gpu is not None:
-            images = images.cuda(args.gpu, non_blocking=True)
-        if torch.cuda.is_available():
-            target = target.cuda(args.gpu, non_blocking=True)
+        with record_function("move inputs to cuda"):
+            if args.gpu is not None:
+                images = images.cuda(args.gpu, non_blocking=True)
+            if torch.cuda.is_available():
+                target = target.cuda(args.gpu, non_blocking=True)
 
         # compute output
-        output = model(images)
-        loss = criterion(output, target)
+        with record_function("forward"):
+            output = model(images)
+        with record_function("loss"):
+            loss = criterion(output, target)
 
         # measure accuracy and record loss
-        acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        losses.update(loss.item(), images.size(0))
-        top1.update(acc1[0], images.size(0))
-        top5.update(acc5[0], images.size(0))
+        with record_function("metrics"):
+            acc1, acc5 = accuracy(output, target, topk=(1, 5))
+            losses.update(loss.item(), images.size(0))
+            top1.update(acc1[0], images.size(0))
+            top5.update(acc5[0], images.size(0))
 
         # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        with record_function("optimizer.zero_grad"):
+            optimizer.zero_grad()
+        with record_function("backward"):
+            loss.backward()
+        with record_function("optimizer step"):
+            optimizer.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -501,3 +518,4 @@ def accuracy(output, target, topk=(1,)):
 
 if __name__ == '__main__':
     main()
+    
