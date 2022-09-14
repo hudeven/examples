@@ -58,11 +58,11 @@ python main.py -a resnet50 --dist-url 'tcp://IP_OF_NODE0:FREEPORT' --dist-backen
 ### Profile distributed training
 * single node, 4 GPUs with DP
 ```bash
-python main.py -a resnet50 --dummy
+python main.py -a resnet50 --epochs 1 --dummy
 ```
 * single node, 4 GPUs with DDP
 ```bash
-python main.py -a resnet50 --dist-url 'tcp://127.0.0.1:1234' --dist-backend 'nccl' --multiprocessing-distributed --world-size 1 --rank 0 --dummy
+python main.py -a resnet50 --dist-url 'tcp://127.0.0.1:1234' --dist-backend 'nccl' --multiprocessing-distributed --world-size 1 --rank 0 --epochs 1 --dummy
 ```
 ## Usage
 

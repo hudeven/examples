@@ -298,7 +298,7 @@ def main_worker(gpu, ngpus_per_node, args):
                     }, is_best)
     
     # print(prof.key_averages(group_by_stack_n=5).table(sort_by='self_cpu_time_total', row_limit=5))
-    prof.export_chrome_trace(f"trace_{args.rank}.json")
+    prof.export_chrome_trace(f"trace_{args.arch}_{args.rank}.json")
 
 
 def train(train_loader, model, criterion, optimizer, epoch, args):
