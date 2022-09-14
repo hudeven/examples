@@ -89,7 +89,7 @@ best_acc1 = 0
 def main():
     args = parser.parse_args()
 
-    if args.dry_run is not None:
+    if args.dry_run:
         args.epochs = 1
         warnings.warn('You have chosen dry-run mode. '
                       'This will reset epochs to 1 and '
@@ -220,8 +220,8 @@ def main_worker(gpu, ngpus_per_node, args):
     # Data loading code
     if args.dummy:
         print("=> Dummy data is used!")
-        train_dataset = datasets.FakeData(1281167, (3, 224, 224), 1000, transforms.ToTensor())
-        val_dataset = datasets.FakeData(50000, (3, 224, 224), 1000, transforms.ToTensor())
+        train_dataset = datasets.FakeData(100, (3, 224, 224), 1000, transforms.ToTensor())
+        val_dataset = datasets.FakeData(20, (3, 224, 224), 1000, transforms.ToTensor())
     else:
         traindir = os.path.join(args.data, 'train')
         valdir = os.path.join(args.data, 'val')
@@ -518,4 +518,3 @@ def accuracy(output, target, topk=(1,)):
 
 if __name__ == '__main__':
     main()
-    
